@@ -3,8 +3,8 @@
 A self-contained, NumPy-based quantitative finance, numerical integration, and statistical physics research engine. Built from the ground up with minimal dependencies (optional `scipy` acceleration), this engine implements 44 foundational stochastic models, variance reduction techniques, quasi-Monte Carlo generators, risk management frameworks, and quantum mechanical solvers—all cross-validated against exact closed-form analytical benchmarks.
 
 ---
-
-Has bugs Every code haves any bugs?, report it! 
+NOTE 📝 :
+Has bugs Because it's still new i mean.. Every new codes always haves bugs feel free to report it! 
 
 ---
 
