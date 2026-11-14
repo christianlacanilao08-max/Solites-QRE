@@ -6,7 +6,7 @@ A self-contained, NumPy-based quantitative finance, numerical integration, and s
 
 # NOTE 📝 :
 
-Has bugs Because it's still new i mean.. Every new codes always haves bugs feel free to report it! 
+Since this update is brand new, you might run into a few bugs, new code always comes with a few kinks! If you spot anything broken, please feel free to report it so we can fix it.
 
 ---
 
