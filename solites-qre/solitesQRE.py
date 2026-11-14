@@ -1408,22 +1408,51 @@ def lsm_american(model, K, T, m, n_train=60000, n_test=60000, seed=0,
         disc = np.exp(-model.r * grid.t)
 
         def vtilde(j, s):
+            """Calculate continuation value for input s. s can be 1D or 2D."""
             hv = h(s)
             if j == 0 or j == m or betas[j] is None:
                 return hv
-            return np.maximum(hv, _basis(s / K, basis) @ betas[j])
+            
+            # Handle 2D input (n_o, n_i) from inner simulations
+            if s.ndim == 2:
+                n_rows, n_cols = s.shape
+                # Reshape to 1D to apply basis
+                s_flat = s.ravel()
+                basis_vals = _basis(s_flat / K, basis) # (n_rows*n_cols, deg+1)
+                cont_flat = basis_vals @ betas[j]      # (n_rows*n_cols,)
+                cont = cont_flat.reshape(n_rows, n_cols)
+                return np.maximum(hv, cont)
+            else:
+                # 1D input
+                basis_vals = _basis(s / K, basis)
+                cont = basis_vals @ betas[j]
+                return np.maximum(hv, cont)
 
         M = np.zeros(n_o)
         best = Hd[:, 0].copy()
         for j in range(0, m):
             dt = grid.dt[j]
             s = S[:, j]
+            # Generate inner paths for next step
             zi = rng.standard_normal((n_o, n_i))
-            zi = np.concatenate([zi, -zi], axis=1)
+            # Antithetic for inner paths
+            zi = np.concatenate([zi, -zi], axis=1)[:, :n_i] # Keep size n_i if needed, or use all
+            
+            # Calculate Sn for all inner paths
+            # s is (n_o,), zi is (n_o, n_i_inner)
+            # We need to broadcast s correctly
             Sn = s[:, None] * np.exp((model.r - model.q - 0.5 * model.sigma ** 2) * dt
                                      + model.sigma * math.sqrt(dt) * zi)
-            cond = disc[j + 1] * vtilde(j + 1, Sn).mean(axis=1)
+            
+            # Calculate conditional expectation E[V~_{j+1} | F_j]
+            # vtilde returns (n_o, n_i_inner)
+            V_next_inner = vtilde(j + 1, Sn)
+            cond = disc[j + 1] * V_next_inner.mean(axis=1)
+            
+            # Calculate actual V~_{j+1} for the realized path
+            # We need S[:, j+1] which is the next step of the OUTER path
             actual = disc[j + 1] * vtilde(j + 1, S[:, j + 1])
+            
             M += actual - cond
             best = np.maximum(best, disc[j + 1] * Hd[:, j + 1] - M)
         out["upper"] = float(best.mean())
@@ -1830,13 +1859,69 @@ def first_passage_bm(mu, sigma, b, T, n=200000, m=64, seed=0) -> Dict:
     rng = np.random.default_rng(seed)
     Z = rng.standard_normal((n, m))
     W = wiener_path(Z, grid.t, "standard")
+    # X at t_1, ..., t_m
     X = mu * grid.t[1:][None, :] + sigma * W
+    
+    # Discrete monitoring: check if any point is below -b
     disc = float((X <= -b).any(axis=1).mean())
-    d_i, d_j = X[:, :-1] + b, X[:, 1:] + b
-    d_0 = np.full((n, 1), b)
-    di = np.concatenate([d_0, d_i], axis=1)
-    cross = np.exp(-2 * np.maximum(di, 0) * np.maximum(d_j, 0) / (sigma ** 2 * grid.dt[None, :]))
-    surv = np.prod(1 - cross, axis=1) * (~((X <= -b).any(axis=1)))
+    
+    # Brownian Bridge correction
+    # We have m intervals. 
+    # Interval j is from t[j] to t[j+1].
+    # Value at t[0] is 0. Value at t[j+1] is X[:, j].
+    # Distance to barrier -b: d = X - (-b) = X + b.
+    # Start of interval j: t[j]. End: t[j+1].
+    # For j=0: start=0, end=X[:,0].
+    # For j=1: start=X[:,0], end=X[:,1].
+    # ...
+    # For j=m-1: start=X[:,m-2], end=X[:,m-1].
+    
+    # Construct d_start and d_end for all m intervals
+    # d_start: [0, X[:,0], ..., X[:,m-2]]
+    # d_end:   [X[:,0], X[:,1], ..., X[:,m-1]]
+    
+    d_end = X + b  # shape (n, m)
+    # Prepend 0+b to each row for d_start
+    d_start = np.concatenate([np.full((n, 1), b), d_end[:, :-1]], axis=1) # shape (n, m)
+    
+    # grid.dt has shape (m,)
+    denom = sigma ** 2 * grid.dt[None, :] # shape (1, m)
+    
+    # Crossing probability for each interval
+    # P(cross | no hit at endpoints) approx exp(-2 * d_start * d_end / (sigma^2 dt))
+    # This formula assumes d_start, d_end > 0. If either is <=0, it already hit.
+    # We handle 'already hit' separately.
+    
+    # First, identify paths that already hit at discrete points
+    hit_discrete = (X <= -b).any(axis=1) # shape (n,)
+    
+    # For bridge correction, we only care about paths that DID NOT hit discretely
+    # But the formula works if we set cross prob to 1 if d_start or d_end <= 0?
+    # Actually, if d_start <=0 or d_end <=0, the path already hit, so survival=0.
+    # The formula exp(-2*d1*d2/vdt) gives prob of NO crossing given endpoints.
+    # If d1<=0 or d2<=0, we should treat survival as 0.
+    
+    # Calculate bridge survival probability for each interval
+    # Clip distances to be positive for the formula, but mark as hit if original was <=0
+    d_start_pos = np.maximum(d_start, 0)
+    d_end_pos = np.maximum(d_end, 0)
+    
+    # Probability of NO crossing in each interval
+    p_no_cross = np.exp(-2.0 * d_start_pos * d_end_pos / denom)
+    
+    # If d_start or d_end was originally <=0, p_no_cross should be 0 (sure hit)
+    # But since we clipped, we need to enforce this.
+    # Actually, if d_start <=0 or d_end <=0, the path hit the barrier at the endpoint.
+    # So survival is 0.
+    hit_at_endpoint = (d_start <= 0) | (d_end <= 0)
+    p_no_cross = np.where(hit_at_endpoint, 0.0, p_no_cross)
+    
+    # Total survival is product of no-crossing probabilities over all intervals
+    surv = np.prod(p_no_cross, axis=1)
+    
+    # If it hit discretely, survival is 0.
+    surv = np.where(hit_discrete, 0.0, surv)
+    
     return {"exact": exact, "discrete": disc, "bridge": float(1 - surv.mean()),
             "se_bridge": float(surv.std(ddof=1) / math.sqrt(n))}
 
