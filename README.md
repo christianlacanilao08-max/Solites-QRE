@@ -36,16 +36,25 @@ Run the full benchmark suite, execute self-tests against analytical closed forms
 python solitesQRE.py demo
 
 # Run a specific demo module (e.g., heston, asian, risk, mlmc, physics)
-python solitesQRE.py demo --demo heston
+python solites.py demo --demo heston
 
 # Run a fast smoke test (25% path count)
-python solitesQRE.py demo --quick
+python solites.py demo --quick
 
 # Run automated unit tests verifying estimators against closed-form formulas
-python solitesQRE.py selftest
+python solites.py selftest
 
 # Price a custom option via CLI
-python solitesQRE.py price --model heston --product barrier --S0 100 --K 100 --B 90 --T 1.0 --paths 200000
+python solites.py price --model heston --product barrier --S0 100 --K 100 --B 90 --T 1.0 --paths 200000
+```
+
+---
+
+## 🛠️ Installation
+```bash
+    git clone https://github.com/christianlacanilao08-max/Solites-QRE.git
+    cd Solites-QRE
+    pip install -r requirements.txt
 ```
 
 ---
