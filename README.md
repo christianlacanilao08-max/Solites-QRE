@@ -33,7 +33,7 @@ Run the full benchmark suite, execute self-tests against analytical closed forms
 
 ```bash
 # Run all 11 demonstration modules
-python solitesQRE.py demo
+python solites.py demo
 
 # Run a specific demo module (e.g., heston, asian, risk, mlmc, physics)
 python solites.py demo --demo heston
