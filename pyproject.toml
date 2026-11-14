@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "solites-qre"
+version = "1.0.0-beta"
+description = "Advanced Quantitative Finance Research Engine implementing MLMC, Heston QE-M, and EVT."
+readme = "README.md"
+license = {text = "GPL-3.0-or-later"}
+requires-python = ">=3.9"
+keywords = ["quantitative-finance", "monte-carlo", "mlmc", "risk-management", "heston"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+dependencies = [
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "black",
+]
+
+[project.scripts]
+solites = "solites:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["solites*"]
