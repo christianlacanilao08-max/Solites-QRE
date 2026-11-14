@@ -4,9 +4,20 @@ A self-contained, NumPy-based quantitative finance, numerical integration, and s
 
 ---
 
-# NOTE 📝 :
+## ⚠️ Release Note: Beta Version
 
-Since this update is brand new, you might run into a few bugs, new code always comes with a few kinks! If you spot anything broken, please feel free to report it so we can fix it.
+
+This engine implements cutting-edge numerical methods (MLMC, ARS, Heston QE-M) that are typically found only in proprietary research libraries. While the mathematical logic has been rigorously validated against closed-form solutions and academic benchmarks, this is a **brand-new release**.
+
+### 🐛 Known Limitations & Reporting
+*   **Numerical Edge Cases:** Extreme parameter values (e.g., very high volatility or near-zero time to maturity) may require manual tuning of integration nodes or step sizes.
+*   **Performance:** On mobile devices (Android/iOS), heavy modules like *Credit Portfolio Importance Sampling* or *American Option Dual Bounds* may take several minutes to complete due to nested optimization loops.
+*   **Bug Reports:** If you encounter a crash, a numerical instability, or a logic error, please report it! 
+    *   Include the **command** you ran.
+    *   Include the **error traceback**.
+    *   Include the **parameters** used.
+
+> *"New code always comes with a few kinks. Your feedback helps make Solites the most robust open-source QRE available."*
 
 ---
 
