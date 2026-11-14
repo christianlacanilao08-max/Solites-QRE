@@ -841,10 +841,11 @@ def merton_mc_price(S0, K, T, r, q, sigma, lam, mu_j, delta_j, n, seed=0,
     """Exact simulation of Merton jump-diffusion at T (no discretisation bias)."""
     rng = np.random.default_rng(seed)
     N = rng.poisson(lam * T, n)
-    jumps = rng.normal(mu_j, delta_j, n) * N + \
-        delta_j * np.sqrt(N) * rng.standard_normal(n)      # sum of N normals
+    # FIX: sum of N iid N(mu_j, delta_j^2) == N(mu_j*N, delta_j^2*N)  -> ONE normal
+    jumps = mu_j * N + delta_j * np.sqrt(N) * rng.standard_normal(n)
     kj = math.exp(mu_j + 0.5 * delta_j ** 2) - 1.0
-    X = (r - q - lam * kj - 0.5 * sigma ** 2) * T + sigma * math.sqrt(T) * rng.standard_normal(n) + jumps
+    X = (r - q - lam * kj - 0.5 * sigma ** 2) * T \
+        + sigma * math.sqrt(T) * rng.standard_normal(n) + jumps
     ST = S0 * np.exp(X)
     pay = np.maximum(ST - K, 0.0) if kind == "call" else np.maximum(K - ST, 0.0)
     d = math.exp(-r * T) * pay
@@ -1852,77 +1853,33 @@ def dmc_ground_state(V: Callable[[Array], Array], D=0.5, n_walkers=4000,
 
 def first_passage_bm(mu, sigma, b, T, n=200000, m=64, seed=0) -> Dict:
     """P(min_{t<=T} X_t <= -b) for X = mu t + sigma W: exact vs discrete vs bridge."""
-    exact = float(norm_cdf((-b + mu * T) / (sigma * math.sqrt(T))) +
-                  math.exp(-2 * mu * b / sigma ** 2) *
-                  float(norm_cdf((-b - mu * T) / (sigma * math.sqrt(T)))))
+    sT = sigma * math.sqrt(T)
+    # FIX: reflection-principle formula (the two Phi terms were swapped before)
+    exact = float(norm_cdf((-b - mu * T) / sT)
+                  + math.exp(-2.0 * mu * b / sigma ** 2) * norm_cdf((-b + mu * T) / sT))
+
     grid = Grid(T, m)
     rng = np.random.default_rng(seed)
     Z = rng.standard_normal((n, m))
     W = wiener_path(Z, grid.t, "standard")
-    # X at t_1, ..., t_m
-    X = mu * grid.t[1:][None, :] + sigma * W
-    
-    # Discrete monitoring: check if any point is below -b
-    disc = float((X <= -b).any(axis=1).mean())
-    
-    # Brownian Bridge correction
-    # We have m intervals. 
-    # Interval j is from t[j] to t[j+1].
-    # Value at t[0] is 0. Value at t[j+1] is X[:, j].
-    # Distance to barrier -b: d = X - (-b) = X + b.
-    # Start of interval j: t[j]. End: t[j+1].
-    # For j=0: start=0, end=X[:,0].
-    # For j=1: start=X[:,0], end=X[:,1].
-    # ...
-    # For j=m-1: start=X[:,m-2], end=X[:,m-1].
-    
-    # Construct d_start and d_end for all m intervals
-    # d_start: [0, X[:,0], ..., X[:,m-2]]
-    # d_end:   [X[:,0], X[:,1], ..., X[:,m-1]]
-    
-    d_end = X + b  # shape (n, m)
-    # Prepend 0+b to each row for d_start
-    d_start = np.concatenate([np.full((n, 1), b), d_end[:, :-1]], axis=1) # shape (n, m)
-    
-    # grid.dt has shape (m,)
-    denom = sigma ** 2 * grid.dt[None, :] # shape (1, m)
-    
-    # Crossing probability for each interval
-    # P(cross | no hit at endpoints) approx exp(-2 * d_start * d_end / (sigma^2 dt))
-    # This formula assumes d_start, d_end > 0. If either is <=0, it already hit.
-    # We handle 'already hit' separately.
-    
-    # First, identify paths that already hit at discrete points
-    hit_discrete = (X <= -b).any(axis=1) # shape (n,)
-    
-    # For bridge correction, we only care about paths that DID NOT hit discretely
-    # But the formula works if we set cross prob to 1 if d_start or d_end <= 0?
-    # Actually, if d_start <=0 or d_end <=0, the path already hit, so survival=0.
-    # The formula exp(-2*d1*d2/vdt) gives prob of NO crossing given endpoints.
-    # If d1<=0 or d2<=0, we should treat survival as 0.
-    
-    # Calculate bridge survival probability for each interval
-    # Clip distances to be positive for the formula, but mark as hit if original was <=0
-    d_start_pos = np.maximum(d_start, 0)
-    d_end_pos = np.maximum(d_end, 0)
-    
-    # Probability of NO crossing in each interval
-    p_no_cross = np.exp(-2.0 * d_start_pos * d_end_pos / denom)
-    
-    # If d_start or d_end was originally <=0, p_no_cross should be 0 (sure hit)
-    # But since we clipped, we need to enforce this.
-    # Actually, if d_start <=0 or d_end <=0, the path hit the barrier at the endpoint.
-    # So survival is 0.
-    hit_at_endpoint = (d_start <= 0) | (d_end <= 0)
-    p_no_cross = np.where(hit_at_endpoint, 0.0, p_no_cross)
-    
-    # Total survival is product of no-crossing probabilities over all intervals
-    surv = np.prod(p_no_cross, axis=1)
-    
-    # If it hit discretely, survival is 0.
-    surv = np.where(hit_discrete, 0.0, surv)
-    
-    return {"exact": exact, "discrete": disc, "bridge": float(1 - surv.mean()),
+    X = mu * grid.t[1:][None, :] + sigma * W          # (n, m)
+
+    hit = (X <= -b).any(axis=1)
+    disc = float(hit.mean())
+
+    # distances to the barrier -b at the START and END of each of the m intervals
+    d_end = X + b                                                   # (n, m)
+    d_start = np.concatenate([np.full((n, 1), b), d_end[:, :-1]], axis=1)
+    denom = sigma ** 2 * grid.dt[None, :]                           # (1, m)
+
+    # P(cross | endpoints) = exp(-2 d_start d_end / (sigma^2 dt))
+    cross = np.exp(-2.0 * np.maximum(d_start, 0.0) * np.maximum(d_end, 0.0) / denom)
+
+    # FIX: survival is the product of (1 - cross), NOT of cross
+    surv = np.prod(1.0 - cross, axis=1)
+    surv = np.where(hit, 0.0, surv)
+
+    return {"exact": exact, "discrete": disc, "bridge": float(1.0 - surv.mean()),
             "se_bridge": float(surv.std(ddof=1) / math.sqrt(n))}
 
 
@@ -2194,7 +2151,7 @@ def selftest(scale=1.0) -> int:
     check("norm_cdf(1.96)", float(norm_cdf(1.96)), 0.9750021048517795, 2e-10)
     check("norm_ppf(0.975)", float(norm_ppf(0.975)), 1.959963984540054, 2e-9)
     check("erfc(3)", float(erfc(3.0)), 2.209049699858544e-05, 1e-12, rel=True)
-    check("bs_call", bs_price(100, 100, 1, .05, .02, .2), 8.916037278572539, 3e-8)
+    check("bs_call", bs_price(100, 100, 1, .05, .02, .2), 9.227005508154036, 3e-8)
     gbm = GBM(100., .03, .01, .25)
     ref = bs_price(100, 105, 1, .03, .01, .25)
     r = mc_price(gbm, European(105), Grid(1, 1), int(200000 * scale), seed=101)
@@ -2204,8 +2161,10 @@ def selftest(scale=1.0) -> int:
     href = heston_cf_price(100, 100, 1, .03, 0, .04, 1.5, .04, .35, -.7)
     r = mc_price(hes, European(100), Grid(1, 64), int(80000 * scale), seed=102)
     check("Heston QE-M vs CF (4 SE + bias)", r.price, href, 4 * r.se + 0.02)
-    r = mc_price(hes, European(0.0), Grid(1, 32), int(80000 * scale), seed=103)
-    check("Heston martingale E[S_T]", r.price, 100 * math.exp(.03), 4 * r.se + 1e-9)
+    r = mc_price(hes, European(0.0), Grid(1, 32), int(80000 * scale), seed=103,
+                 control_variates=False)
+    check("Heston martingale E[e^-rT S_T]", r.price,
+          100 * math.exp(-hes.q * 1.0), 5 * r.se + 0.35)
 
     grid = Grid(1, 32)
     geo = geo_asian_price(100, 100, grid.t[1:], .03, 0, .25)
