@@ -4,6 +4,10 @@ A self-contained, NumPy-based quantitative finance, numerical integration, and s
 
 ---
 
+Has bugs Every code haves any bugs?, report it! 
+
+---
+
 ## Quick Start & CLI Usage
 
 ### Requirements
