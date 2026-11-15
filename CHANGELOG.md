@@ -50,7 +50,7 @@ All notable changes to Solites QRE are documented in this file.
   - **Cause:** `math.sqrt(V / C)` where `V` and `C` are arrays.
   - **Fix:** Changed to `np.sqrt(V / C)`.
 
-### ✅ Validation
+### Validation
 - All 18 self-test checks now pass with **0 failures**.
 - All 11 demos produce statistically correct results within expected confidence intervals.
 - Verified against closed-form solutions: Black-Scholes, Heston CF, Merton series, Reiner-Rubinstein barrier, reflection principle, geometric Asian, CRR binomial, DMC harmonic oscillator.
