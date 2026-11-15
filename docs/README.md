@@ -5,4 +5,4 @@ This space serves as a living gallery of validation results, convergence studies
 that demonstrate the accuracy and performance of our research-grade algorithms.
 
 ---
-*Written by Dear*Solite.** 
+*Written by Dear *Solite.** 
