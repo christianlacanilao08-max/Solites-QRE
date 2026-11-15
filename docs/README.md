@@ -1,5 +1,8 @@
-## Welcome to Docs!
+# 📚 Solites QRE Documentation & Results
 
-This is where I upload the previews, and the results, feel free to explore!:)
+Welcome to the official documentation hub for **Solites Quantitative Finance Research Engine**. 
+This space serves as a living gallery of validation results, convergence studies, and visual benchmarks 
+that demonstrate the accuracy and performance of our research-grade algorithms.
+
 ---
-- Written by Solite
+*Written:*Solite**
