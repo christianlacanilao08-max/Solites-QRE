@@ -392,11 +392,15 @@ class ARS:
             j = np.clip(np.searchsorted(self.cdf, u) - 1, 0, len(self.x) - 1)
             l, r, m, c = self.z[j], self.z[j + 1], self.dv[j], self.c[j]
             frac = (u - self.cdf[j]) / np.maximum(self.cdf[j + 1] - self.cdf[j], 1e-300)
-            if abs(m) <= 1e-12:
-                y = l + frac * (r - l)
-            else:                                  # exact inverse CDF of exp piece
-                expo = np.clip(m * (r - l), -700, 700)
-                y = l + np.log1p(frac * np.expm1(expo)) / m
+            flat = np.abs(m) <= 1e-12              # m is a vector -> per-element mask
+            a = m * (r - l)
+            safe_m = np.where(flat, 1.0, m)        # avoid dividing by ~0
+            with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+                # a <= 0 : integrate from l  (argument clipped to <= 0, never overflows)
+                y_lo = l + np.log1p(frac * np.expm1(np.clip(a, -700.0, 0.0))) / safe_m
+                # a >  0 : mirror from r     (argument -a <= 0, never overflows)
+                y_hi = r + np.log1p((1.0 - frac) * np.expm1(np.clip(-a, -700.0, 0.0))) / safe_m
+            y = np.where(flat, l + frac * (r - l), np.where(a > 0.0, y_hi, y_lo))
             y = np.clip(y, self.lo, self.hi)
             up = self._upper(y)
             sq = self._squeeze(y)
@@ -2085,9 +2089,12 @@ def demo_samplers(scale=1.0):
     s = ars.sample(n, rng)
     xs = np.linspace(-8, 8, 20001)
     pdf = np.exp([h(v) for v in xs])
-    Z = np.trapz(pdf, xs)
-    m2 = np.trapz(xs ** 2 * pdf, xs) / Z
-    m4 = np.trapz(xs ** 4 * pdf, xs) / Z
+    _trap = getattr(np, "trapezoid", None)
+    if _trap is None:                       # NumPy < 2.0
+        _trap = np.trapz
+    Z = _trap(pdf, xs)
+    m2 = _trap(xs ** 2 * pdf, xs) / Z
+    m4 = _trap(xs ** 4 * pdf, xs) / Z
     print(f"  ARS  p(x) ~ exp(-x^2/2 - x^4/10): acceptance={ars.acceptance_rate:.3f}, "
           f"hull pts={len(ars.x)}")
     print(f"       E[x^2]={s.var():.5f} (quadrature {m2:.5f}), "
