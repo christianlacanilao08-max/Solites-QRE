@@ -1,6 +1,6 @@
 ## Main Script 👀📝
 
-The valuablest files in here, of course.
+The most valuable files in here, of course.
 I already explained everything on **root README.MD**
 
 ---
